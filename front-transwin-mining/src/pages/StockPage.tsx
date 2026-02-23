@@ -1,20 +1,24 @@
 // Page Stock — 6 onglets
 // MODIFIÉ : SortieSection reçoit les données des 3 citernes pour calculer automatiquement
 import { useState } from "react";
-import { Droplets, ListOrdered, Globe, Truck } from "lucide-react";
+import { Droplets, ListOrdered, Globe, Truck, ShieldAlert } from "lucide-react";
 import { useBeng1Data, useBeng2Data, use81669Data, useSortieData, useMatriculeData } from "@/hooks/useStockSections";
 import CiterneSection from "@/components/stock/CiterneSection";
 import SortieSection from "@/components/stock/SortieSection";
 import MatriculeSection from "@/components/stock/MatriculeSection";
 import GlobalSection from "@/components/stock/GlobalSection";
+import Verification81669 from "@/components/stock/Verification81669";
+import SuiviRecharge81669 from "@/components/stock/SuiviRecharge81669";
 
 const tabs = [
-  { id: "beng1",     label: "Beng 1",    icon: Droplets, color: "text-mining-info" },
-  { id: "beng2",     label: "Beng 2",    icon: Droplets, color: "text-accent" },
-  { id: "81669",     label: "81669A55",  icon: Droplets, color: "text-mining-success" },
-  { id: "sortie",    label: "Sortie",    icon: ListOrdered, color: "text-primary" },
-  { id: "matricule", label: "Matricule", icon: Truck,    color: "text-primary" },
-  { id: "global",    label: "Global",    icon: Globe,    color: "text-primary" },
+  { id: "beng1",     label: "Beng 1",       icon: Droplets,    color: "text-mining-info" },
+  { id: "beng2",     label: "Beng 2",       icon: Droplets,    color: "text-accent" },
+  { id: "81669",     label: "81669A55",     icon: Droplets,    color: "text-mining-success" },
+  { id: "sortie",    label: "Sortie",       icon: ListOrdered, color: "text-primary" },
+  { id: "matricule", label: "Matricule",    icon: Truck,       color: "text-primary" },
+  { id: "global",    label: "Global",       icon: Globe,       color: "text-primary" },
+  { id: "audit",     label: "Vérif. 81669", icon: ShieldAlert, color: "text-red-500" },
+  { id: "suivi",     label: "Suivi Recharge", icon: ShieldAlert, color: "text-orange-500" },
 ] as const;
 
 type TabId = typeof tabs[number]["id"];
@@ -45,10 +49,18 @@ const StockPage = () => {
         {tabs.map(({ id, label, icon: Icon, color }) => (
           <button key={id} onClick={() => setActiveTab(id)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-              activeTab === id ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+              activeTab === id
+                ? id === "audit"
+                  ? "bg-red-950 text-red-400 shadow-sm ring-1 ring-red-500/50"
+                  : "bg-card text-primary shadow-sm"
+                : id === "audit" || id === "suivi"
+                  ? id === "audit" ? "text-red-400/70 hover:text-red-400 hover:bg-red-950/30" : "text-orange-400/70 hover:text-orange-400 hover:bg-orange-950/30"
+                  : "text-muted-foreground hover:text-foreground"
             }`}>
-            <Icon className={`w-4 h-4 ${activeTab === id ? color : ""}`} />
+            <Icon className={`w-4 h-4 ${activeTab === id ? color : id === "audit" ? "text-red-400/70" : ""}`} />
             {label}
+{id === "audit" && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse ml-1" />}
+            {id === "suivi" && <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse ml-1" />}
           </button>
         ))}
       </div>
@@ -88,6 +100,14 @@ const StockPage = () => {
           removeBeng2={beng2.remove}
           remove81669={c81669.remove}
           resetAll={() => { beng1.reset(); beng2.reset(); c81669.reset(); }}
+        />
+      )}
+      {activeTab === "audit" && <Verification81669 />}
+      {activeTab === "suivi" && (
+        <SuiviRecharge81669
+          beng1Data={beng1.data}
+          beng2Data={beng2.data}
+          c81669Data={c81669.data}
         />
       )}
     </div>

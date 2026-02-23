@@ -12,7 +12,7 @@ import * as XLSX from "xlsx";
 
 import { useAffectationData }                                        from "@/hooks/useLocalData";
 import { useBeng1Data, useBeng2Data, use81669Data, buildGlobalData } from "@/hooks/useStockSections";
-import { reportSite }                                                from "@/data/stockData";
+import { reportSite, reportDate, consommationChauffeurs, consommationEngins } from "@/data/stockData";
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -91,6 +91,12 @@ const Cell = ({ value, onSave, isEditing, onStartEdit, onEndEdit, canEdit, type=
     );
   }
 
+  // Noms de personnes (equipe1/equipe2) → cellule vide si pas de valeur
+  const isNameField = placeholder?.toLowerCase().includes("nom") ||
+    placeholder?.toLowerCase().includes("équipe") ||
+    placeholder?.toLowerCase().includes("equipe") ||
+    placeholder?.toLowerCase().includes("conducteur");
+
   return (
     <td style={{ ...TD(style), cursor: canEdit ? "pointer" : "default", position: "relative" }}
       onClick={() => canEdit && onStartEdit()}
@@ -98,7 +104,13 @@ const Cell = ({ value, onSave, isEditing, onStartEdit, onEndEdit, canEdit, type=
       {canEdit && <span style={{ position: "absolute", top: 2, right: 2, width: 5, height: 5, borderRadius: "50%", background: "#3b82f6", opacity: 0.45, pointerEvents: "none" }} />}
       <span style={{ display: "block" }}>
         {(value === "" || value === 0)
-          ? <span style={{ color: "#ccc" }}>{placeholder || "—"}</span>
+          ? (isNameField
+              ? (canEdit
+                  ? <span style={{ color: "#ccc", fontSize: "10px" }}>{placeholder}</span>  // visible seulement en mode édition
+                  : null)  // cellule vraiment vide en mode lecture
+              : (canEdit
+                  ? <span style={{ color: "#ccc" }}>{placeholder || "—"}</span>
+                  : <span style={{ color: "#bbb" }}>—</span>))
           : String(value)}
       </span>
     </td>
@@ -117,12 +129,14 @@ const RapportPage = () => {
 
   const availableDates = useMemo(() => {
     const set = new Set<string>();
+    // Toujours inclure la date de référence du rapport Excel
+    set.add(reportDate);
     globalData.forEach(g => { if (g.date) set.add(g.date); });
     [...beng1.data, ...beng2.data, ...c81669.data].forEach(e => { if (e.date) set.add(e.date); });
     return Array.from(set).sort((a, b) => parseDateTs(a) - parseDateTs(b));
   }, [globalData, beng1.data, beng2.data, c81669.data]);
 
-  const [currentDate,  setCurrentDate] = useState<string>(todayStr);
+  const [currentDate,  setCurrentDate] = useState<string>(reportDate);
   const [showEdit,     setShowEdit]    = useState(false);
   const [editingCell,  setEditingCell] = useState<string | null>(null);
   const [store,        setStore]       = useState<Record<string, DateData>>(loadStore);
@@ -139,6 +153,32 @@ const RapportPage = () => {
 
   // Calcul des lignes par défaut depuis affectation + citernes
   const defaultData = useMemo((): DateData => {
+
+    // ── Si c'est la date de référence du rapport Excel → utiliser les vraies données ──
+    if (currentDate === reportDate) {
+      const ch: ChRow[] = consommationChauffeurs.map((c, i) => ({
+        id: `ref_ch_${i}_${c.code}`,
+        equipe1: c.equipe1,
+        equipe2: c.equipe2,
+        code: c.code,
+        litres: c.litres,
+        pct: c.pourcentage,
+        activite: c.activite,
+      }));
+      const en: EnRow[] = consommationEngins.map((e, i) => ({
+        id: `ref_en_${i}_${e.engin}`,
+        equipe1: e.equipe1,
+        equipe2: e.equipe2,
+        engin: e.engin,
+        litres: e.litres,
+        pct: e.pourcentage,
+        heure: e.heure === "-" ? "" : e.heure,
+        aff: e.affectation,
+      }));
+      return { ch, en };
+    }
+
+    // ── Autres dates : calculer depuis citernes + affectations ────────────────────────
     const dayGlobal = globalData.filter(g => g.date === currentDate);
 
     // ── Clé de correspondance universelle ────────────────────────
@@ -366,8 +406,8 @@ const RapportPage = () => {
 
           <div className="flex items-center gap-4 flex-wrap">
             <div>
-              <h2 className="font-display text-xl font-bold text-primary uppercase tracking-wide">Rapport Journalier Gasoil</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">{reportSite} — {availableDates.length} date(s)</p>
+              <h2 className="font-display text-xl font-bold text-primary uppercase tracking-wide">Rapport Journalier — Consommation Gasoil</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{reportSite} — {availableDates.length} date(s) disponible(s)</p>
             </div>
             <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
               <button onClick={() => prevD && setCurrentDate(prevD)} disabled={!prevD} className="p-1.5 rounded-lg hover:bg-primary/10 disabled:opacity-30">
@@ -444,7 +484,18 @@ const RapportPage = () => {
                 <Cell value={row.equipe2} isEditing={isEditing(row.id,"equipe2")} onStartEdit={()=>startEdit(row.id,"equipe2")} onEndEdit={endEdit} onSave={v=>updateCell("ch",row.id,"equipe2",v)} canEdit={showEdit} style={{textTransform:"uppercase",width:"23%"}} placeholder="Nom équipe 2"/>
                 <Cell value={row.code} isEditing={isEditing(row.id,"code")} onStartEdit={()=>startEdit(row.id,"code")} onEndEdit={endEdit} onSave={v=>updateCell("ch",row.id,"code",v)} canEdit={showEdit} style={{textAlign:"center",fontWeight:"bold",backgroundColor:"#edf2f7"}} placeholder="D183"/>
                 <Cell value={row.litres||""} isEditing={isEditing(row.id,"litres")} onStartEdit={()=>startEdit(row.id,"litres")} onEndEdit={endEdit} onSave={v=>updateCell("ch",row.id,"litres",v)} canEdit={showEdit} type="number" style={{textAlign:"center",fontWeight:"bold"}} placeholder="0"/>
-                <Cell value={row.pct?row.pct.toFixed(2):""} isEditing={isEditing(row.id,"pct")} onStartEdit={()=>startEdit(row.id,"pct")} onEndEdit={endEdit} onSave={v=>updateCell("ch",row.id,"pct",v)} canEdit={showEdit} type="number" style={{textAlign:"center",fontWeight:"bold",backgroundColor:pctBg(row.pct)}} placeholder="0"/>
+                <td style={{...TD({textAlign:"center",fontWeight:"bold",backgroundColor:pctBg(row.pct)}), cursor:showEdit?"pointer":"default", position:"relative"}}
+                  onClick={()=>showEdit&&startEdit(row.id,"pct")}>
+                  {showEdit && <span style={{position:"absolute",top:2,right:2,width:5,height:5,borderRadius:"50%",background:"#3b82f6",opacity:0.45,pointerEvents:"none"}}/>}
+                  {isEditing(row.id,"pct") ? (
+                    <input type="number" defaultValue={row.pct} autoFocus
+                      onBlur={e=>{updateCell("ch",row.id,"pct",e.target.value);endEdit();}}
+                      onKeyDown={e=>{if(e.key==="Enter"){updateCell("ch",row.id,"pct",(e.target as HTMLInputElement).value);endEdit();}if(e.key==="Escape")endEdit();}}
+                      style={{width:"100%",fontSize:"11px",padding:"3px 6px",border:"2px solid #3b82f6",borderRadius:"4px",background:"#fff",outline:"none"}}/>
+                  ) : (
+                    <span>{row.pct > 0 ? `${row.pct.toFixed(2)}%` : <span style={{color:"#666"}}>-</span>}</span>
+                  )}
+                </td>
                 <Cell value={row.activite} isEditing={isEditing(row.id,"activite")} onStartEdit={()=>startEdit(row.id,"activite")} onEndEdit={endEdit} onSave={v=>updateCell("ch",row.id,"activite",v)} canEdit={showEdit} type="select" options={ACTIVITES} style={{textAlign:"center",textTransform:"uppercase"}} placeholder="Activité"/>
                 {showEdit && <DelBtn section="ch" rowId={row.id}/>}
               </tr>
@@ -461,13 +512,13 @@ const RapportPage = () => {
             )}
 
             <tr style={{backgroundColor:"#90ee90"}}>
-              <td colSpan={showEdit?4:3} style={{padding:"8px 12px",border:"1px solid #a0aec0",textAlign:"center",fontWeight:"bold",fontSize:12,textTransform:"uppercase"}}>TOTAL</td>
-              <td colSpan={3} style={{padding:"8px 12px",border:"1px solid #a0aec0",textAlign:"center",fontWeight:"bold",fontSize:15}}>{totalCh}</td>
+              <td colSpan={showEdit?5:4} style={{padding:"8px 12px",border:"1px solid #a0aec0",textAlign:"center",fontWeight:"bold",fontSize:13,textTransform:"uppercase",letterSpacing:"1px"}}>TOTAL</td>
+              <td colSpan={showEdit?3:2} style={{padding:"8px 12px",border:"1px solid #a0aec0",textAlign:"center",fontWeight:"bold",fontSize:16}}>{totalCh.toLocaleString("fr-FR")}</td>
             </tr>
           </tbody>
         </table>
 
-        <div style={{height:10,backgroundColor:"#f0f4f8"}}/>
+        <div style={{height:14,backgroundColor:"#fff"}}/>
 
         {/* TABLE ENGINS */}
         <table style={{width:"100%",borderCollapse:"collapse"}}>
@@ -495,8 +546,19 @@ const RapportPage = () => {
                 <Cell value={row.equipe2} isEditing={isEditing(row.id,"equipe2")} onStartEdit={()=>startEdit(row.id,"equipe2")} onEndEdit={endEdit} onSave={v=>updateCell("en",row.id,"equipe2",v)} canEdit={showEdit} style={{textTransform:"uppercase",width:"21%"}} placeholder="Nom conducteur 2"/>
                 <Cell value={row.engin} isEditing={isEditing(row.id,"engin")} onStartEdit={()=>startEdit(row.id,"engin")} onEndEdit={endEdit} onSave={v=>updateCell("en",row.id,"engin",v)} canEdit={showEdit} style={{textAlign:"center",fontWeight:"bold",backgroundColor:"#edf2f7"}} placeholder="350 E71"/>
                 <Cell value={row.litres||""} isEditing={isEditing(row.id,"litres")} onStartEdit={()=>startEdit(row.id,"litres")} onEndEdit={endEdit} onSave={v=>updateCell("en",row.id,"litres",v)} canEdit={showEdit} type="number" style={{textAlign:"center",fontWeight:"bold"}} placeholder="0"/>
-                <Cell value={row.pct?row.pct.toFixed(2):""} isEditing={isEditing(row.id,"pct")} onStartEdit={()=>startEdit(row.id,"pct")} onEndEdit={endEdit} onSave={v=>updateCell("en",row.id,"pct",v)} canEdit={showEdit} type="number" style={{textAlign:"center",fontWeight:"bold",backgroundColor:pctBg(row.pct)}} placeholder="0"/>
-                <Cell value={row.heure==="-"?"":row.heure} isEditing={isEditing(row.id,"heure")} onStartEdit={()=>startEdit(row.id,"heure")} onEndEdit={endEdit} onSave={v=>updateCell("en",row.id,"heure",v)} canEdit={showEdit} style={{textAlign:"center"}} placeholder="13H"/>
+                <td style={{...TD({textAlign:"center",fontWeight:"bold",backgroundColor:pctBg(row.pct)}), cursor:showEdit?"pointer":"default", position:"relative"}}
+                  onClick={()=>showEdit&&startEdit(row.id,"pct")}>
+                  {showEdit && <span style={{position:"absolute",top:2,right:2,width:5,height:5,borderRadius:"50%",background:"#3b82f6",opacity:0.45,pointerEvents:"none"}}/>}
+                  {isEditing(row.id,"pct") ? (
+                    <input type="number" defaultValue={row.pct} autoFocus
+                      onBlur={e=>{updateCell("en",row.id,"pct",e.target.value);endEdit();}}
+                      onKeyDown={e=>{if(e.key==="Enter"){updateCell("en",row.id,"pct",(e.target as HTMLInputElement).value);endEdit();}if(e.key==="Escape")endEdit();}}
+                      style={{width:"100%",fontSize:"11px",padding:"3px 6px",border:"2px solid #3b82f6",borderRadius:"4px",background:"#fff",outline:"none"}}/>
+                  ) : (
+                    <span>{row.pct > 0 ? `${row.pct.toFixed(2)}%` : <span style={{color:"#999"}}>-</span>}</span>
+                  )}
+                </td>
+                <Cell value={row.heure} isEditing={isEditing(row.id,"heure")} onStartEdit={()=>startEdit(row.id,"heure")} onEndEdit={endEdit} onSave={v=>updateCell("en",row.id,"heure",v)} canEdit={showEdit} style={{textAlign:"center"}} placeholder="13H"/>
                 <Cell value={row.aff} isEditing={isEditing(row.id,"aff")} onStartEdit={()=>startEdit(row.id,"aff")} onEndEdit={endEdit} onSave={v=>updateCell("en",row.id,"aff",v)} canEdit={showEdit} type="select" options={AFF_OPTIONS} style={{textAlign:"center",textTransform:"uppercase"}} placeholder="Affectation"/>
                 {showEdit && <DelBtn section="en" rowId={row.id}/>}
               </tr>
@@ -512,19 +574,19 @@ const RapportPage = () => {
               </tr>
             )}
 
-            <tr style={{backgroundColor:"#808080",color:"white"}}>
-              <td colSpan={showEdit?4:3} style={{padding:"8px 12px",border:"1px solid #666",textAlign:"center",fontWeight:"bold",fontSize:12,textTransform:"uppercase"}}>TOTAL</td>
-              <td colSpan={4} style={{padding:"8px 12px",border:"1px solid #666",textAlign:"center",fontWeight:"bold",fontSize:15}}>{totalEn}</td>
+            <tr style={{backgroundColor:"#6b7280",color:"white"}}>
+              <td colSpan={showEdit?5:4} style={{padding:"8px 12px",border:"1px solid #555",textAlign:"center",fontWeight:"bold",fontSize:13,textTransform:"uppercase",letterSpacing:"1px"}}>TOTAL</td>
+              <td colSpan={showEdit?4:3} style={{padding:"8px 12px",border:"1px solid #555",textAlign:"center",fontWeight:"bold",fontSize:16}}>{totalEn.toLocaleString("fr-FR")}</td>
             </tr>
           </tbody>
         </table>
 
         {/* GRAND TOTAL */}
-        <table style={{width:"100%",borderCollapse:"collapse",marginTop:6}}>
+        <table style={{width:"100%",borderCollapse:"collapse",marginTop:4}}>
           <tbody>
             <tr>
-              <td style={{backgroundColor:"#2d3748",color:"white",padding:"14px 16px",textAlign:"center",fontWeight:"bold",fontSize:18,textTransform:"uppercase",width:"50%",border:"2px solid #1a202c"}}>TOTAL</td>
-              <td style={{backgroundColor:"#e53e3e",color:"white",padding:"14px 16px",textAlign:"center",fontWeight:"bold",fontSize:24,border:"2px solid #1a202c"}}>{grandTotal}</td>
+              <td style={{backgroundColor:"#1a202c",color:"white",padding:"16px 24px",textAlign:"center",fontWeight:"bold",fontSize:20,textTransform:"uppercase",width:"50%",border:"2px solid #0d1117",letterSpacing:"2px"}}>TOTAL</td>
+              <td style={{backgroundColor:"#e53e3e",color:"white",padding:"16px 24px",textAlign:"center",fontWeight:"bold",fontSize:28,border:"2px solid #0d1117",letterSpacing:"1px"}}>{grandTotal.toLocaleString("fr-FR")}</td>
             </tr>
           </tbody>
         </table>
