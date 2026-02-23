@@ -1,6 +1,6 @@
 // Section Sortie — calcul automatique depuis les 3 citernes
-// CORRECTION : beng1 d'un jour = somme de tous les qteSortie de cette date dans beng1
-// Plus besoin d'importer un fichier séparé — les données viennent des citernes en temps réel
+// RÈGLE IMPORTANTE : les sorties Beng 1 / Beng 2 vers la citerne 81669A55
+// sont exclues du calcul (ce sont des transferts citerne→citerne, pas de la consommation réelle)
 
 import { useState, useMemo, useRef } from "react";
 import { CiterneEntry, SortieEntry } from "@/data/stockTypes";
@@ -22,17 +22,31 @@ interface Props {
   c81669Data?: CiterneEntry[];
 }
 
+// ── Détecte si une ligne est un rechargement de la citerne 81669A55 ──
+// (transfert entre citernes → ne pas compter comme consommation réelle)
+function estRechargement81669(e: CiterneEntry): boolean {
+  const immat = (e.immatriculation || e.code || e.remarque || "").toUpperCase();
+  return immat.includes("81669");
+}
+
 // ── Calcul automatique : total qteSortie par date et par citerne ──
+// RÈGLE : exclure de Beng 1 et Beng 2 les sorties vers la 81669A55
+//         (ce sont des transferts de citerne à citerne, pas une consommation)
 function computeAutoSortie(
   beng1: CiterneEntry[],
   beng2: CiterneEntry[],
   c81669: CiterneEntry[]
 ): SortieEntry[] {
-  // Collecter toutes les dates uniques des 3 citernes
+
+  // Sorties réelles Beng1 = tout sauf rechargement 81669
+  const beng1Reelles = beng1.filter(e => !estRechargement81669(e));
+  const beng2Reelles = beng2.filter(e => !estRechargement81669(e));
+
+  // Collecter toutes les dates uniques (sorties réelles uniquement)
   const allDates = new Set<string>();
-  beng1.forEach(e  => { if (e.date && e.qteSortie > 0) allDates.add(e.date); });
-  beng2.forEach(e  => { if (e.date && e.qteSortie > 0) allDates.add(e.date); });
-  c81669.forEach(e => { if (e.date && e.qteSortie > 0) allDates.add(e.date); });
+  beng1Reelles.forEach(e => { if (e.date && e.qteSortie > 0) allDates.add(e.date); });
+  beng2Reelles.forEach(e => { if (e.date && e.qteSortie > 0) allDates.add(e.date); });
+  c81669.forEach(e =>       { if (e.date && e.qteSortie > 0) allDates.add(e.date); });
 
   // Trier les dates
   const sorted = Array.from(allDates).sort((a, b) => {
@@ -43,12 +57,12 @@ function computeAutoSortie(
     return parse(a) - parse(b);
   });
 
-  // Pour chaque date → sommer qteSortie de chaque citerne
+  // Pour chaque date → sommer qteSortie (hors rechargements 81669)
   return sorted.map(date => ({
     date,
-    beng1:       beng1.filter(e  => e.date === date).reduce((s, e) => s + (e.qteSortie || 0), 0),
-    beng2:       beng2.filter(e  => e.date === date).reduce((s, e) => s + (e.qteSortie || 0), 0),
-    citerne81669: c81669.filter(e => e.date === date).reduce((s, e) => s + (e.qteSortie || 0), 0),
+    beng1:        beng1Reelles.filter(e => e.date === date).reduce((s, e) => s + (e.qteSortie || 0), 0),
+    beng2:        beng2Reelles.filter(e => e.date === date).reduce((s, e) => s + (e.qteSortie || 0), 0),
+    citerne81669: c81669.filter(e =>      e.date === date).reduce((s, e) => s + (e.qteSortie || 0), 0),
   }));
 }
 
@@ -115,6 +129,13 @@ const SortieSection = ({
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-mining-success/10 text-mining-success border border-mining-success/30 rounded-lg text-xs font-semibold">
               <Info className="w-3.5 h-3.5" />
               Calcul automatique depuis les citernes
+            </div>
+          )}
+          {/* Note : rechargements 81669 exclus */}
+          {hasAutoData && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-400/30 rounded-lg text-xs font-semibold">
+              <Info className="w-3.5 h-3.5" />
+              Transferts vers 81669A55 exclus
             </div>
           )}
 
