@@ -159,6 +159,12 @@ const GlobalSection = ({
   const totalParcours = useMemo(() => filtered.reduce((s, r) => s + r.parcours, 0), [filtered]);
   const moyPct = totalParcours > 0 ? ((totalLitres / totalParcours) * 100).toFixed(2) : "—";
 
+  // CORRECTION : Entrées = nombre de véhicules UNIQUES (chaque code = 1 seul véhicule)
+  const uniqueVehicules = useMemo(
+    () => new Set(filtered.map(r => String(r.code).trim().toUpperCase())).size,
+    [filtered]
+  );
+
   // ── Live preview formulaire ───────────────────────────────
   const liveParcours = calcParcours(form.compteurKm, form.kilometrage);
   const liveConso    = calcConso(form.code, form.litres, liveParcours);
@@ -277,7 +283,7 @@ const GlobalSection = ({
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Entrées",        value: filtered.length,                       unit: "véhicules", color: "text-primary" },
+          { label: "Véhicules",      value: uniqueVehicules,                       unit: "codes uniques", color: "text-primary" },
           { label: "Total Litres",   value: totalLitres.toLocaleString("fr-FR"),   unit: "L",         color: "text-accent" },
           { label: "Total Parcours", value: totalParcours.toLocaleString("fr-FR"), unit: "km",        color: "text-mining-info" },
           { label: "Moy. Conso",     value: moyPct,                                unit: "%",         color: "text-mining-warning" },

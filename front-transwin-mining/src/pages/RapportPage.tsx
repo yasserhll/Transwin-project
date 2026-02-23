@@ -140,31 +140,117 @@ const RapportPage = () => {
   // Calcul des lignes par défaut depuis affectation + citernes
   const defaultData = useMemo((): DateData => {
     const dayGlobal = globalData.filter(g => g.date === currentDate);
-    const litresMap = new Map<string, number>();
-    const consoMap  = new Map<string, number>();
+
+    // ── Clé de correspondance universelle ────────────────────────
+    // Extrait tous les nombres du code et les concatène → clé unique stable
+    // Exemples :
+    //   "350 E71"       → "35071"
+    //   "480 E49"       → "48049"
+    //   "CH 966 E48"    → "96648"
+    //   "CH 760 E22"    → "76022"
+    //   "NIVELEUSE E50" → "50"
+    //   "E71"           → "71"
+    //   "E48"           → "48"
+    // Règle: si le code contient "E" suivi d'un numéro, le numéro E est la clé principale
+    function enginNumKey(code: string): string {
+      const s = String(code).trim().toUpperCase();
+      // Priorité 1 : numéro après E (ex: E48 → "48", 480 E49 → "49")
+      const eMatch = s.match(/E(\d+)/);
+      if (eMatch) return eMatch[1];
+      // Priorité 2 : tous les chiffres concaténés
+      const nums = s.match(/\d+/g);
+      return nums ? nums.join("") : s;
+    }
+
+    // Indexer globalData par clé numérique
+    const litresMap   = new Map<string, number>();
+    const consoMap    = new Map<string, number>();
+    const parcoursMap = new Map<string, number>();
+
     for (const g of dayGlobal) {
-      const k = normalizeCode(String(g.code));
-      litresMap.set(k, (litresMap.get(k) ?? 0) + g.litres);
+      const k = enginNumKey(String(g.code));
+      litresMap.set(k,   (litresMap.get(k)   ?? 0) + g.litres);
+      parcoursMap.set(k, (parcoursMap.get(k) ?? 0) + g.parcours);
       if (g.consommation > 0) consoMap.set(k, g.consommation);
     }
+
+    // Lookup par clé numérique
+    function findByKey(map: Map<string, number>, camion: string): number {
+      return map.get(enginNumKey(camion)) ?? 0;
+    }
+
+    // ── Camions ──────────────────────────────────────────────────
+    // Pour les camions (codes D...) on garde le normalizeCode exact
+    const camionLitresMap   = new Map<string, number>();
+    const camionConsoMap    = new Map<string, number>();
+    for (const g of dayGlobal) {
+      const k = normalizeCode(String(g.code));
+      camionLitresMap.set(k, (camionLitresMap.get(k) ?? 0) + g.litres);
+      if (g.consommation > 0) camionConsoMap.set(k, g.consommation);
+    }
+
     const ch: ChRow[] = affectation.data.filter(a => a.type === "camion").map(a => ({
       id: `aff_ch_${a.camion}`, equipe1: a.equipe1, equipe2: a.equipe2, code: a.camion,
-      litres: litresMap.get(normalizeCode(a.camion)) ?? 0,
-      pct: (consoMap.get(normalizeCode(a.camion)) ?? 0) * 100, activite: "",
+      litres: camionLitresMap.get(normalizeCode(a.camion)) ?? 0,
+      pct: (camionConsoMap.get(normalizeCode(a.camion)) ?? 0) * 100, activite: "",
     }));
+
+    // ── Engins ───────────────────────────────────────────────────
     const en: EnRow[] = affectation.data.filter(a => a.type === "engin").map(a => {
-      const eKey = extractEnginKey(a.camion);
+      const litres   = findByKey(litresMap,   a.camion);
+      const conso    = findByKey(consoMap,    a.camion);
+      const parcours = findByKey(parcoursMap, a.camion);
+      // Heure = parcours de l'engin (en heures de fonctionnement)
+      // Formule validée sur Excel : heure = round(litres / pct) = parcours
+      // car pct = litres/parcours → parcours = litres/pct
+      const heureVal = parcours > 0
+        ? `${Math.round(parcours)}H`
+        : (litres > 0 && conso > 0)
+          ? `${Math.round(litres / (conso * 100))}H`
+          : "";
       return {
         id: `aff_en_${a.camion}`, equipe1: a.equipe1, equipe2: a.equipe2, engin: a.camion,
-        litres: eKey ? (litresMap.get(eKey) ?? 0) : 0,
-        pct: eKey ? (consoMap.get(eKey) ?? 0) * 100 : 0, heure: "-", aff: "",
+        litres,
+        pct: conso * 100,
+        heure: heureVal,
+        aff: "",
       };
     });
     return { ch, en };
   }, [globalData, affectation.data, currentDate]);
 
-  // Données finales: store si existe, sinon défaut calculé
-  const dateData: DateData = store[currentDate] ?? defaultData;
+  // Données finales: fusionner store + defaultData
+  // - si store existe: garder les champs saisis manuellement (aff, equipe1, equipe2)
+  //   MAIS mettre à jour les champs calculés (litres, pct, heure) depuis defaultData
+  // - si store n'existe pas: utiliser defaultData directement
+  const dateData: DateData = useMemo(() => {
+    const stored = store[currentDate];
+    if (!stored) return defaultData;
+
+    // Fusionner : pour chaque ligne du default, chercher la ligne correspondante dans store
+    const mergeRows = <T extends { id: string }>(
+      defaultRows: T[],
+      storedRows: T[],
+      calcFields: (keyof T)[]
+    ): T[] => {
+      return defaultRows.map(defRow => {
+        const stRow = storedRows.find(r => r.id === defRow.id);
+        if (!stRow) return defRow; // nouvelle ligne → tout depuis default
+        // Garder les champs manuels du store, mais écraser les champs calculés
+        const merged = { ...stRow };
+        for (const field of calcFields) {
+          (merged as Record<string, unknown>)[field as string] =
+            (defRow as Record<string, unknown>)[field as string];
+        }
+        return merged;
+      });
+    };
+
+    return {
+      ch: mergeRows(defaultData.ch, stored.ch, ["litres", "pct"] as (keyof ChRow)[]),
+      en: mergeRows(defaultData.en, stored.en, ["litres", "pct", "heure"] as (keyof EnRow)[]),
+    };
+  }, [store, currentDate, defaultData]);
   const chRows = dateData.ch;
   const enRows = dateData.en;
 
@@ -177,10 +263,12 @@ const RapportPage = () => {
   const persist = (next: Record<string, DateData>) => { setStore(next); saveStore(next); };
 
   const ensureStored = (): DateData => {
-    if (store[currentDate]) return store[currentDate];
-    const next = { ...store, [currentDate]: defaultData };
-    persist(next);
-    return defaultData;
+    // Toujours utiliser dateData (version fusionnée avec calculs à jour)
+    if (!store[currentDate]) {
+      const next = { ...store, [currentDate]: dateData };
+      persist(next);
+    }
+    return dateData;
   };
 
   const updateCell = (section: "ch"|"en", rowId: string, field: string, rawVal: string) => {

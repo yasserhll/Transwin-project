@@ -1,6 +1,5 @@
-// src/pages/StockPage.tsx
-// Version connectée au backend Laravel avec gestion loading/error
-
+// Page Stock — 6 onglets
+// MODIFIÉ : SortieSection reçoit les données des 3 citernes pour calculer automatiquement
 import { useState } from "react";
 import { Droplets, ListOrdered, Globe, Truck } from "lucide-react";
 import { useBeng1Data, useBeng2Data, use81669Data, useSortieData, useMatriculeData } from "@/hooks/useStockSections";
@@ -8,7 +7,6 @@ import CiterneSection from "@/components/stock/CiterneSection";
 import SortieSection from "@/components/stock/SortieSection";
 import MatriculeSection from "@/components/stock/MatriculeSection";
 import GlobalSection from "@/components/stock/GlobalSection";
-import { ApiStatusWrapper } from "@/components/ui/ApiStatus";
 
 const tabs = [
   { id: "beng1",     label: "Beng 1",    icon: Droplets, color: "text-mining-info" },
@@ -30,9 +28,6 @@ const StockPage = () => {
   const sortie    = useSortieData();
   const matricule = useMatriculeData();
 
-  // Loading global (premier chargement)
-  const activeHook = { beng1, beng2, "81669": c81669, sortie, matricule, global: beng1 }[activeTab];
-
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
@@ -41,7 +36,7 @@ const StockPage = () => {
           Gestion de Stock — Gasoil / Diesel
         </h2>
         <p className="text-muted-foreground text-sm mt-1 font-body">
-          Benguerir 2026 — Connecté au backend Laravel
+          Benguerir 2026 — Chaque section détaillée séparément
         </p>
       </div>
 
@@ -58,42 +53,43 @@ const StockPage = () => {
         ))}
       </div>
 
-      {/* Contenu avec gestion loading/error */}
-      <ApiStatusWrapper
-        loading={activeHook.loading}
-        error={activeHook.error}
-        onRetry={activeHook.reload}
-        loadingMessage="Chargement depuis le serveur..."
-      >
-        {activeTab === "beng1" && (
-          <CiterneSection title="Citerne Beng 1" colorClass="text-mining-info" bgClass="bg-mining-info/10" {...beng1} />
-        )}
-        {activeTab === "beng2" && (
-          <CiterneSection title="Citerne Beng 2" colorClass="text-accent" bgClass="bg-accent/10" {...beng2} />
-        )}
-        {activeTab === "81669" && (
-          <CiterneSection title="Citerne 81669A55" colorClass="text-mining-success" bgClass="bg-mining-success/10" {...c81669} />
-        )}
-        {activeTab === "sortie" && <SortieSection {...sortie} />}
-        {activeTab === "matricule" && <MatriculeSection {...matricule} />}
-        {activeTab === "global" && (
-          <GlobalSection
-            beng1={beng1.data}
-            beng2={beng2.data}
-            citerne81669={c81669.data}
-            addBeng1={beng1.add}
-            addBeng2={beng2.add}
-            add81669={c81669.add}
-            updateBeng1={beng1.update}
-            updateBeng2={beng2.update}
-            update81669={c81669.update}
-            removeBeng1={beng1.remove}
-            removeBeng2={beng2.remove}
-            remove81669={c81669.remove}
-            resetAll={() => { beng1.reset(); beng2.reset(); c81669.reset(); }}
-          />
-        )}
-      </ApiStatusWrapper>
+      {/* Contenu */}
+      {activeTab === "beng1" && (
+        <CiterneSection title="Citerne Beng 1" colorClass="text-mining-info" bgClass="bg-mining-info/10" {...beng1} />
+      )}
+      {activeTab === "beng2" && (
+        <CiterneSection title="Citerne Beng 2" colorClass="text-accent" bgClass="bg-accent/10" {...beng2} />
+      )}
+      {activeTab === "81669" && (
+        <CiterneSection title="Citerne 81669A55" colorClass="text-mining-success" bgClass="bg-mining-success/10" {...c81669} />
+      )}
+      {activeTab === "sortie" && (
+        // On passe les 3 citernes pour calculer automatiquement les totaux par jour
+        <SortieSection
+          {...sortie}
+          beng1Data={beng1.data}
+          beng2Data={beng2.data}
+          c81669Data={c81669.data}
+        />
+      )}
+      {activeTab === "matricule" && <MatriculeSection {...matricule} />}
+      {activeTab === "global" && (
+        <GlobalSection
+          beng1={beng1.data}
+          beng2={beng2.data}
+          citerne81669={c81669.data}
+          addBeng1={beng1.add}
+          addBeng2={beng2.add}
+          add81669={c81669.add}
+          updateBeng1={beng1.update}
+          updateBeng2={beng2.update}
+          update81669={c81669.update}
+          removeBeng1={beng1.remove}
+          removeBeng2={beng2.remove}
+          remove81669={c81669.remove}
+          resetAll={() => { beng1.reset(); beng2.reset(); c81669.reset(); }}
+        />
+      )}
     </div>
   );
 };
