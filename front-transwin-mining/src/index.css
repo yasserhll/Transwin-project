@@ -1,0 +1,194 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* TRANSWIN MINING - Design System
+   Industrial mining theme: deep navy blue + amber/orange accent
+   All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Core backgrounds */
+    --background: 215 35% 97%;
+    --foreground: 215 40% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 40% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 40% 10%;
+
+    /* Primary: Deep Navy Blue (Transwin Mining) */
+    --primary: 215 68% 22%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 215 55% 32%;
+    --primary-dark: 215 75% 14%;
+
+    /* Secondary: Steel Blue */
+    --secondary: 210 30% 88%;
+    --secondary-foreground: 215 68% 22%;
+
+    /* Accent: Amber/Orange (Mining equipment) */
+    --accent: 35 95% 50%;
+    --accent-foreground: 0 0% 100%;
+    --accent-light: 40 90% 60%;
+    --accent-dark: 30 90% 40%;
+
+    /* Muted */
+    --muted: 215 20% 92%;
+    --muted-foreground: 215 20% 45%;
+
+    /* Status colors */
+    --success: 142 70% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 95% 50%;
+    --warning-foreground: 0 0% 100%;
+    --danger: 0 75% 52%;
+    --danger-foreground: 0 0% 100%;
+    --info: 200 80% 45%;
+    --info-foreground: 0 0% 100%;
+
+    --destructive: 0 75% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 20% 85%;
+    --input: 215 20% 85%;
+    --ring: 215 68% 22%;
+    --radius: 0.5rem;
+
+    /* Table row colors */
+    --row-high:    0 90% 94%;
+    --row-medium:  210 80% 92%;
+    --row-normal:  0 0% 100%;
+    --total-row:   142 55% 85%;
+    --grand-total: 0 75% 52%;
+
+    /* Header gradient */
+    --header-from: 215 68% 22%;
+    --header-to:   215 55% 32%;
+
+    /* Sidebar */
+    --sidebar-background:        215 68% 18%;
+    --sidebar-foreground:        215 20% 90%;
+    --sidebar-primary:           35 95% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent:            215 55% 28%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border:            215 55% 28%;
+    --sidebar-ring:              35 95% 50%;
+
+    /* Mining custom colors */
+    --mining-info:    200 80% 45%;
+    --mining-success: 142 70% 38%;
+    --mining-danger:  0 75% 52%;
+    --mining-warning: 35 95% 50%;
+  }
+
+  .dark {
+    --background: 215 40% 8%;
+    --foreground: 215 20% 95%;
+    --card: 215 40% 12%;
+    --card-foreground: 215 20% 95%;
+    --popover: 215 40% 12%;
+    --popover-foreground: 215 20% 95%;
+    --primary: 35 95% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 40% 18%;
+    --secondary-foreground: 215 20% 95%;
+    --muted: 215 40% 18%;
+    --muted-foreground: 215 20% 60%;
+    --accent: 35 95% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 75% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 40% 22%;
+    --input: 215 40% 22%;
+    --ring: 35 95% 50%;
+    --mining-info:    200 80% 55%;
+    --mining-success: 142 60% 48%;
+    --mining-danger:  0 70% 58%;
+    --mining-warning: 35 90% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, .display-font {
+    font-family: 'Oswald', sans-serif;
+  }
+}
+
+@layer utilities {
+  /* Fonts */
+  .font-display { font-family: 'Oswald', sans-serif; }
+  .font-body    { font-family: 'Inter', sans-serif; }
+
+  /* Gradients */
+  .gradient-header {
+    background: linear-gradient(135deg, hsl(var(--primary-dark)), hsl(var(--primary)));
+  }
+  .gradient-accent {
+    background: linear-gradient(135deg, hsl(var(--accent-dark)), hsl(var(--accent)));
+  }
+
+  /* Mining status text colors */
+  .text-mining-info    { color: hsl(var(--mining-info)); }
+  .text-mining-success { color: hsl(var(--mining-success)); }
+  .text-mining-danger  { color: hsl(var(--mining-danger)); }
+  .text-mining-warning { color: hsl(var(--mining-warning)); }
+
+  /* Mining status bg colors */
+  .bg-mining-info    { background-color: hsl(var(--mining-info)); }
+  .bg-mining-success { background-color: hsl(var(--mining-success)); }
+  .bg-mining-danger  { background-color: hsl(var(--mining-danger)); }
+  .bg-mining-warning { background-color: hsl(var(--mining-warning)); }
+
+  /* Accent & primary helpers */
+  .text-accent      { color: hsl(var(--accent)); }
+  .bg-accent-color  { background-color: hsl(var(--accent)); }
+  .bg-primary-color { background-color: hsl(var(--primary)); }
+  .bg-primary-dark  { background-color: hsl(var(--primary-dark)); }
+  .bg-accent-dark   { background-color: hsl(var(--accent-dark)); }
+
+  /* Success / Danger */
+  .bg-success  { background-color: hsl(var(--success)); }
+  .text-success { color: hsl(var(--success)); }
+  .bg-danger   { background-color: hsl(var(--danger)); }
+  .text-danger { color: hsl(var(--danger)); }
+
+  /* Shadows */
+  .shadow-mining {
+    box-shadow: 0 4px 20px -4px hsl(var(--primary) / 0.3);
+  }
+  .shadow-accent {
+    box-shadow: 0 4px 20px -4px hsl(var(--accent) / 0.4);
+  }
+
+  /* Animation */
+  .animate-fade-in {
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* ── Print ─────────────────────────────────────────── */
+@media print {
+  .no-print   { display: none !important; }
+  .print-full { width: 100% !important; max-width: none !important; }
+  body        { background: white !important; }
+}
