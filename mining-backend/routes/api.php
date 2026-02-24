@@ -8,9 +8,14 @@ use App\Http\Controllers\Api\SortieController;
 use App\Http\Controllers\Api\MatriculeController;
 use App\Http\Controllers\Api\AffectationController;
 use App\Http\Controllers\Api\RapportController;
+use App\Http\Controllers\Api\WebhookController;
 
 // ── PUBLIQUE ──────────────────────────────────────────────────
 Route::post('/login', [AuthController::class, 'login']);
+
+// ── WEBHOOK Google Apps Script (sans token Sanctum) ───────────
+Route::post('/webhook/sync',   [WebhookController::class, 'sync']);
+Route::get ('/webhook/status', [WebhookController::class, 'status']);
 
 // ── PROTÉGÉES (token requis) ──────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
@@ -19,11 +24,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get ('/me',     [AuthController::class, 'me']);
 
-    // Gestion utilisateurs (admin seulement — vérifié dans le controller)
-    Route::get   ('/users',     [UserController::class, 'index']);
-    Route::post  ('/users',     [UserController::class, 'store']);
-    Route::put   ('/users/{id}',[UserController::class, 'update']);
-    Route::delete('/users/{id}',[UserController::class, 'destroy']);
+    // Gestion utilisateurs
+    Route::get   ('/users',      [UserController::class, 'index']);
+    Route::post  ('/users',      [UserController::class, 'store']);
+    Route::put   ('/users/{id}', [UserController::class, 'update']);
+    Route::delete('/users/{id}', [UserController::class, 'destroy']);
 
     // Citernes
     Route::get   ('/citernes',        [CiterneController::class, 'index']);
@@ -56,9 +61,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/affectations/{id}',   [AffectationController::class, 'destroy']);
 
     // Rapports
-    Route::get   ('/rapports',     [RapportController::class, 'index']);
-    Route::post  ('/rapports',     [RapportController::class, 'store']);
-    Route::delete('/rapports/{id}',[RapportController::class, 'destroy']);
+    Route::get   ('/rapports',      [RapportController::class, 'index']);
+    Route::post  ('/rapports',      [RapportController::class, 'store']);
+    Route::delete('/rapports/{id}', [RapportController::class, 'destroy']);
 
     Route::post  ('/rapports/{id}/chauffeurs',        [RapportController::class, 'storeChauffeur']);
     Route::put   ('/rapports/chauffeurs/{id}',        [RapportController::class, 'updateChauffeur']);
