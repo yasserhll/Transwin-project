@@ -58,7 +58,46 @@ interface GlobalRow extends GlobalEntry {
   _consoPct: number;   // consommation × 100  (pour affichage %)
 }
 
+// ── Détecte si une ligne Beng1/Beng2 est un rechargement vers 81669A55 ──
+// (transfert citerne fixe → citerne mobile : PAS de consommation réelle)
+function estRechargement81669(e: CiterneEntry): boolean {
+  const immat = (e.immatriculation || "").toUpperCase();
+  const code  = (e.code            || "").toUpperCase();
+  const rem   = (e.remarque        || "").toUpperCase();
+  return immat.includes("81669") || code.includes("81669") || rem.includes("81669");
+}
+
+// ── Calcul du "mois entreprise" : du 27 du mois M-1 au 26 du mois M ──
+// Retourne une clé lisible : ex. "Janvier 2025" pour la période 27/12→26/01
+function moisEntreprise(dateStr: string): string {
+  const [dd, mm, yyyy] = dateStr.split("/").map(Number);
+  if (!dd || !mm || !yyyy) return "";
+  // Si le jour est >= 27, on est dans la période qui SE TERMINE le 26 du mois suivant
+  let moisFin = mm;
+  let anFin   = yyyy;
+  if (dd >= 27) {
+    moisFin = mm === 12 ? 1 : mm + 1;
+    anFin   = mm === 12 ? yyyy + 1 : yyyy;
+  }
+  return new Date(anFin, moisFin - 1, 1)
+    .toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+}
+
+// Clé de tri (AAAA-MM) pour le mois entreprise
+function moisEntrepriseKey(dateStr: string): string {
+  const [dd, mm, yyyy] = dateStr.split("/").map(Number);
+  if (!dd || !mm || !yyyy) return "";
+  let moisFin = mm;
+  let anFin   = yyyy;
+  if (dd >= 27) {
+    moisFin = mm === 12 ? 1 : mm + 1;
+    anFin   = mm === 12 ? yyyy + 1 : yyyy;
+  }
+  return `${anFin}-${String(moisFin).padStart(2, "0")}`;
+}
+
 // ── buildGlobal : génère toutes les lignes depuis les 3 citernes ──
+// RÈGLE : exclure de beng1/beng2 les sorties vers 81669A55 (rechargements citerne mobile)
 function buildGlobal(
   beng1: CiterneEntry[],
   beng2: CiterneEntry[],
@@ -66,8 +105,11 @@ function buildGlobal(
 ): GlobalRow[] {
   type Item = { e: CiterneEntry; aff: string; idx: number };
   const all: Item[] = [];
-  beng1.forEach( (e, i) => { if (e.code) all.push({ e, aff: "Beng 1",   idx: i }); });
-  beng2.forEach( (e, i) => { if (e.code) all.push({ e, aff: "Beng 2",   idx: i }); });
+  // Beng 1 : exclure rechargements vers 81669A55
+  beng1.forEach( (e, i) => { if (e.code && !estRechargement81669(e)) all.push({ e, aff: "Beng 1",   idx: i }); });
+  // Beng 2 : exclure rechargements vers 81669A55
+  beng2.forEach( (e, i) => { if (e.code && !estRechargement81669(e)) all.push({ e, aff: "Beng 2",   idx: i }); });
+  // 81669A55 : toutes les sorties réelles (véhicules ravitaillés par la citerne mobile)
   c81669.forEach((e, i) => { if (e.code) all.push({ e, aff: "81669A55", idx: i }); });
 
   all.sort((a, b) => sortKey(a.e.date, a.e.heure) - sortKey(b.e.date, b.e.heure));
@@ -126,6 +168,8 @@ const GlobalSection = ({
   const [confirmDel, setConfirmDel] = useState<GlobalRow | null>(null);
   const [search, setSearch]   = useState("");
   const [filterAff, setFilterAff] = useState("all");
+  const [kpiStation, setKpiStation] = useState<"all" | "Beng 1" | "Beng 2" | "81669A55">("all");
+  const [kpiMois, setKpiMois]       = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   // ── Générer toutes les lignes ─────────────────────────────
@@ -133,6 +177,41 @@ const GlobalSection = ({
     () => buildGlobal(beng1, beng2, citerne81669),
     [beng1, beng2, citerne81669]
   );
+
+  // ── KPI mensuel : mois disponibles (cycle entreprise : 27→26) ────────────
+  const availableMonths = useMemo(() => {
+    const map = new Map<string, string>(); // key (AAAA-MM) → label lisible
+    allRows.forEach(r => {
+      const key   = moisEntrepriseKey(r.date);
+      const label = moisEntreprise(r.date);
+      if (key && label) map.set(key, label);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, label]) => ({ key, label }));
+  }, [allRows]);
+
+  const selectedMonthKey   = kpiMois || availableMonths[availableMonths.length - 1]?.key || "";
+  const selectedMonthLabel = availableMonths.find(m => m.key === selectedMonthKey)?.label || selectedMonthKey;
+
+  const kpiRows = useMemo(() => allRows.filter(r =>
+    moisEntrepriseKey(r.date) === selectedMonthKey &&
+    (kpiStation === "all" || r._aff === kpiStation)
+  ), [allRows, selectedMonthKey, kpiStation]);
+
+  const kpiLitres   = useMemo(() => kpiRows.reduce((s, r) => s + r.litres, 0), [kpiRows]);
+  const kpiParcours = useMemo(() => kpiRows.reduce((s, r) => s + r.parcours, 0), [kpiRows]);
+  const kpiConso    = kpiParcours > 0 ? ((kpiLitres / kpiParcours) * 100).toFixed(2) : "—";
+
+  const kpiByStation = useMemo(() => {
+    const stations = ["Beng 1", "Beng 2", "81669A55"] as const;
+    return stations.map(st => ({
+      station: st,
+      litres: allRows
+        .filter(r => moisEntrepriseKey(r.date) === selectedMonthKey && r._aff === st)
+        .reduce((s, r) => s + r.litres, 0),
+    }));
+  }, [allRows, selectedMonthKey]);
 
   const affectations = useMemo(
     () => Array.from(new Set(allRows.map(r => r._aff))).sort(),
@@ -294,6 +373,108 @@ const GlobalSection = ({
             <p className="text-xs text-muted-foreground">{kpi.unit}</p>
           </div>
         ))}
+      </div>
+
+      {/* KPI Mensuel par station */}
+      <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
+        {/* En-tête avec sélecteurs */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Consommation du mois</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Cycle entreprise : du 27 au 26 · Rechargements 81669 exclus</p>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Sélecteur mois (cycle entreprise 27→26) */}
+            <select
+              value={selectedMonthKey}
+              onChange={e => setKpiMois(e.target.value)}
+              className="border border-border rounded-lg px-2 py-1.5 text-xs bg-background focus:ring-2 focus:ring-primary/30 outline-none font-semibold text-primary"
+            >
+              {availableMonths.length === 0
+                ? <option value="">— Aucun mois —</option>
+                : availableMonths.map(({ key, label }) => (
+                    <option key={key} value={key}>
+                      {label.charAt(0).toUpperCase() + label.slice(1)}
+                    </option>
+                  ))
+              }
+            </select>
+            {/* Filtre station */}
+            <div className="flex gap-1">
+              {(["all", "Beng 1", "Beng 2", "81669A55"] as const).map(st => (
+                <button
+                  key={st}
+                  onClick={() => setKpiStation(st)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    kpiStation === st
+                      ? st === "all"       ? "bg-primary text-primary-foreground"
+                        : st === "Beng 1"  ? "bg-blue-600 text-white"
+                        : st === "Beng 2"  ? "bg-amber-500 text-white"
+                        : "bg-green-600 text-white"
+                      : "bg-muted text-muted-foreground hover:bg-primary/10"
+                  }`}
+                >
+                  {st === "all" ? "Toutes" : st}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Note cycle entreprise */}
+        <div className="mb-3 flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-700/40 rounded-lg px-3 py-1.5">
+          <span className="font-bold">📅</span>
+          <span>Cycle : <strong>27 {selectedMonthLabel ? selectedMonthLabel.split(" ")[0].substring(0,3) + " précédent" : "—"}</strong> → <strong>26 {selectedMonthLabel || "—"}</strong></span>
+          <span className="ml-2 font-semibold text-amber-700">· Rechargements 81669A55 exclus de Beng 1 & 2</span>
+        </div>
+
+        {/* Chiffres principaux */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-accent/10 rounded-xl p-3 text-center">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Litres</p>
+            <p className="text-2xl font-display font-bold text-accent mt-1">
+              {kpiLitres > 0 ? kpiLitres.toLocaleString("fr-FR") : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground">L</p>
+          </div>
+          <div className="bg-mining-info/10 rounded-xl p-3 text-center">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Parcours</p>
+            <p className="text-2xl font-display font-bold text-mining-info mt-1">
+              {kpiParcours > 0 ? kpiParcours.toLocaleString("fr-FR") : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground">km</p>
+          </div>
+          <div className="bg-mining-warning/10 rounded-xl p-3 text-center">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Moy. Conso</p>
+            <p className="text-2xl font-display font-bold text-mining-warning mt-1">{kpiConso !== "—" ? kpiConso : "—"}</p>
+            <p className="text-xs text-muted-foreground">{kpiConso !== "—" ? "%" : "—"}</p>
+          </div>
+        </div>
+
+        {/* Répartition par station (barres proportionnelles) */}
+        {kpiStation === "all" && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Répartition par station</p>
+            {kpiByStation.map(({ station, litres }) => {
+              const pct = kpiLitres > 0 ? Math.round((litres / kpiLitres) * 100) : 0;
+              const barColor = station === "Beng 1" ? "bg-blue-500" : station === "Beng 2" ? "bg-amber-500" : "bg-green-500";
+              const textColor = station === "Beng 1" ? "text-blue-700" : station === "Beng 2" ? "text-amber-700" : "text-green-700";
+              const badgeBg   = station === "Beng 1" ? "bg-blue-100" : station === "Beng 2" ? "bg-amber-100" : "bg-green-100";
+              return (
+                <div key={station} className="flex items-center gap-3">
+                  <span className={`text-xs font-semibold w-16 shrink-0 ${textColor}`}>{station}</span>
+                  <div className="flex-1 bg-muted rounded-full h-2">
+                    <div className={`h-2 rounded-full ${barColor} transition-all duration-300`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className={`text-xs font-bold ${textColor} ${badgeBg} px-2 py-0.5 rounded-full shrink-0 min-w-[60px] text-right`}>
+                    {litres > 0 ? `${litres.toLocaleString("fr-FR")} L` : "—"}
+                  </span>
+                  <span className="text-xs text-muted-foreground w-10 text-right shrink-0">{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Filtres */}
